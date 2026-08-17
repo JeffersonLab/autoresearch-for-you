@@ -1,0 +1,6 @@
+DATA
+ROOT
+LOG
+setup_env*
+RootOutput/
+*.sh~

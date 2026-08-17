@@ -1,0 +1,16 @@
+# agent workspace is created at runtime; users decide what to commit from it
+space/plots/
+space/logs/
+
+# build trees and outputs
+build/
+install/
+*.root
+
+# python
+__pycache__/
+.venv/
+
+# editors
+.idea/
+.vscode/
