@@ -15,9 +15,10 @@ existing filtered chain.
 - You are running in a docker container in autonomous mode.
 - Mounts and folders:
   - This repository is mounted at /work.
-  - Source code: /work/jana4ml4fpga — a JANA2-based project. The relevant parts
-    are the plugin `evio6_file` (src/plugins/evio6_file) and the decode library
-    `evio_sro_parser` (src/libraries/evio_sro_parser).
+  - Source code: /work/jana4ml4fpga — a JANA2-based project, stripped to this
+    chain: the plugin `evio6_file` (src/plugins/evio6_file), the decode library
+    `evio_sro_parser` (src/libraries/evio_sro_parser), a log service and the
+    CLI. Component and parameter reference: /work/jana4ml4fpga/README.md.
   - /work/space/ is your workspace: notes, scripts, plots, analyses and
     anything else that does not belong in the source tree. It does not exist
     yet — create it on first run.

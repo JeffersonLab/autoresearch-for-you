@@ -1,5 +1,0 @@
-uproot
-flask
-plotly
-pandas
-flask-cors

@@ -67,10 +67,8 @@ list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)   # Find Find<Modules>
 # Add src as a global include directory
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
-# Libraries are a separated objects.
-# We add this include directory so that in code we could use
-# #include <tcp_daq/tcp_event.h> instead of <libraries/tcp_daq/tcp_event.h>
-# For peer plugins the later is OK, but for libraries <tcp_daq/tcp_event.h> is better
+# Libraries are separate objects. This include directory lets code use
+# #include <evio_sro_parser/SroData.h> instead of <libraries/evio_sro_parser/SroData.h>.
 include_directories(${CMAKE_SOURCE_DIR}/src/libraries)
 
 #Add clang sanitizers
@@ -92,35 +90,8 @@ add_subdirectory(src/libraries)
 add_subdirectory(src/services)
 add_subdirectory(src/plugins)
 add_subdirectory(src/executables)
-add_subdirectory(src/tests)
 
 # Print what we had built
 print_header("CMake processed subdirectories:")
 print_subdirectory_tree()
 message(STATUS "\n-------------------------------")
-
-
-# Install all cmake helpers
-# include(CMakePackageConfigHelpers)
-# configure_package_config_file(cmake/EICreconConfig.cmake.in cmake/EICreconConfig.cmake INSTALL_DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/cmake/EICrecon)
-# install(FILES ${CMAKE_BINARY_DIR}/cmake/EICreconConfig.cmake DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/cmake/EICrecon)  # why is this needed?
-# file(GLOB EICRECON_CMAKE_FILES cmake/*.cmake)
-# install(FILES ${EICRECON_CMAKE_FILES} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/cmake/EICrecon)
-
-#---------------------------------------------------------------------------
-# Install ml4fpga script
-#---------------------------------------------------------------------------
-# Set the path for your script
-set(SCRIPT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/python/ml4fpga.py")
-
-# Set the path where the script will be copied
-set(SCRIPT_DST "${TARGET_BINARY_DIR}/ml4fpga")
-
-
-# Set the target binary directory
-
-# Copy the script during installation
-install(FILES ${SCRIPT_SRC} DESTINATION ${PROGRAM_OUTPUT_DIRECTORY} RENAME ml4fpga )
-
-# Set the permission to executable during installation
-install(CODE "execute_process(COMMAND chmod +x ${PROGRAM_OUTPUT_DIRECTORY}/ml4fpga)")

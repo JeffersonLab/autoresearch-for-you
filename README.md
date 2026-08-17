@@ -19,15 +19,45 @@ hot — see [RESULTS.md](RESULTS.md) for the reference waterfall (spoilers).
 
 Point your LLM at `optimize.md` and see where it gets.
 
+## The data, and what the chain looks for
+
+![One time-slice frame with the coincidence the finder accepts](docs/images/frame_coincidence.png)
+
+One time-slice frame of the input file. The horizontal axis is hit time inside
+the 65.5 µs frame; the vertical axis is readout channel, grouped into one band
+per readout crate (`roc`) — calorimeter crates on top, drift chambers below.
+Blue and orange are calorimeter hits, red is drift chamber. Grey marks the
+always-on channels listed in `config/hot_channels.csv`: they fire continuously
+regardless of physics, and the finder ignores them.
+
+The frame holds 8891 calorimeter and 29 129 drift-chamber hits, and almost all
+of it is noise. A particle shower is instead a **time coincidence**: many
+channels of one crate firing together within a few nanoseconds. That is what the
+finder searches for — it bins the clean calorimeter hits into 32 ns bins and
+accepts the frame when any single bin holds 6 or more hits.
+
+The dashed red line marks the bin that fired here, at 47.52 µs. The right panel
+zooms in on it: 18 channels of crate `roc 25`, spread across slots 5 to 17,
+all inside one 32 ns bin — a shower localized in both time and space, with a
+matching drift-chamber cluster at the same instant. Everywhere else in the
+frame, hits are scattered at random.
+
+About 4% of frames contain such a coincidence. Dropping the other 96% is what
+makes the chain's output small, and getting that decision made faster is the
+whole optimization problem. To render this figure from your own run, use
+[docs/make_frame_display.py](docs/make_frame_display.py) (a reading aid for
+humans, not part of the loop).
+
 ## Repository layout
 
 | Path | What it is |
 |---|---|
-| `jana4ml4fpga/` | The source tree at the pre-optimization state. Self-contained: CMake fetches and builds JANA2/spdlog/fmt if not preinstalled; only ROOT is required. |
+| `jana4ml4fpga/` | The source tree at the pre-optimization state, stripped to the SRO chain: the `evio6_file` plugin, the `evio_sro_parser` library, the log service and the CLI (~46 files). Self-contained: CMake fetches and builds JANA2/spdlog/fmt if not preinstalled; only ROOT is required. See [its README](jana4ml4fpga/README.md) for components and parameters. |
 | `config/hot_channels.csv` | Calibration input of the locked coincidence finder (always-on channels to ignore). Part of the fixed workload — do not regenerate. |
 | `optimize.md` | The task prompt for the agent: working rules + the optimization loop protocol. |
 | `docker/` | Dockerfile for `eicdev/eic-claude` (EIC software stack + Claude Code + uv). |
 | `docs/running-docker.md` | How to run the container: every flag explained, login, headless run, gotchas. |
+| `docs/make_frame_display.py` | Renders the frame picture above from a chain output file. Optional reading aid. |
 | `RESULTS.md` | Reference results from the original run. Read after your own run. |
 
 ## Quick start

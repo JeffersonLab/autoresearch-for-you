@@ -1,221 +1,83 @@
-# JANA4ML4FPGA
+# jana4ml4fpga — SRO streaming chain (autoresearch snapshot)
 
-EIC R&amp;D supported project developing ML on FPGA for streaming readout systems.
-Built on [JANA2](https://github.com/JeffersonLab/JANA2); reads CODA/EVIO raw data
-(FA125/FA250 ADC and SRS/GEM), reconstructs GEM clusters, and writes a flat ROOT
-tree.
+A stripped-down snapshot of
+[JANA4ML4FPGA](https://github.com/JeffersonLab/jana4ml4fpga), reduced to the
+components that read and filter streaming-readout (SRO) EVIO6 data. Everything
+unrelated to that chain — GEM/SRS reconstruction, the HallD EVIO reader, the
+TCP DAQ sources, the flat-tree writer, DQM — is removed. The upstream
+repository has the full project.
 
-## Docker
+The code here is the optimization target of
+[autoresearch-for-you](../README.md). It works and is validated, and it is
+deliberately unoptimized: single-thread reader, eager parsing, serial writer.
 
-The project ships a single image built from
-[`docker/jana4ml4fpga/Dockerfile`](docker/jana4ml4fpga/Dockerfile): the full
-software stack (ROOT, patched JANA2, jana4ml4fpga) on top of `eicdev/eic-base`.
+## What is in the chain
 
-Pull it:
+```
+evio file ──► EvioSroBlockSource ──► SroFrameUnfolder ──► SroRNTupleWriter ──► out.root
+              1 evio block           1 frame = 1 event    frames / fadc_hits /
+              = 1 timeslice          coincidence finder   dcrb_hits RNTuples
+```
+
+| Component | Path | Role |
+|---|---|---|
+| `evio_sro_parser` | [src/libraries/evio_sro_parser](src/libraries/evio_sro_parser) | Standalone decode library: block reader, frame-set parser, translation tables. No JANA, no ROOT — so `sro_dump` and unit checks build without the framework. |
+| `evio6_file` | [src/plugins/evio6_file](src/plugins/evio6_file) | JANA2 plugin: timeslice source, frame unfolder with the coincidence finder, RNTuple writer, and a null writer for isolating the writer's cost. |
+| `log` | [src/services/log](src/services/log) | spdlog-backed logging service; loaded by default (see `main.cc`). |
+| `jana4ml4fpga` | [src/executables/jana4ml4fpga](src/executables/jana4ml4fpga) | CLI wrapper around JANA2. |
+| `sro_dump` | [src/libraries/evio_sro_parser/sro_dump.cc](src/libraries/evio_sro_parser/sro_dump.cc) | Framework-free decoder check: dumps block and frame structure. |
+
+## Build
+
+Requirements: a C++20 compiler, CMake ≥ 3.19, ROOT ≥ 6.38 (for RNTuple), and
+network access on the first configure. JANA2, spdlog and fmt are fetched and
+built automatically when `find_package` does not find them; JANA2 is patched
+during the fetch (see [cmake/fetch_dependencies.cmake](cmake/fetch_dependencies.cmake)).
 
 ```bash
-docker pull eicdev/jana4ml4fpga:latest
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=build/install
+cmake --build build -j $(nproc)
+cmake --install build
 ```
 
-…or build it locally (context is the repo root):
+`install_software.py` is an alternative for hosts without ROOT: it bootstraps a
+self-contained Miniforge environment (ROOT + C++20 toolchain + CMake) and then
+runs the build.
+
+## Run
 
 ```bash
-docker build -f docker/jana4ml4fpga/Dockerfile -t eicdev/jana4ml4fpga:latest .
+export LD_LIBRARY_PATH=<prefix>/lib:$LD_LIBRARY_PATH
+export JANA_PLUGIN_PATH=<prefix>/plugins
+
+<prefix>/bin/jana4ml4fpga -Pplugins=evio6_file \
+  -Pnthreads=1 -Pjana:nevents=500 \
+  -Pevio6_file:finder=coincidence \
+  -Pevio6_file:finder_bin_ticks=8 \
+  -Pevio6_file:finder_min_hits_in_bin=6 \
+  -Pevio6_file:finder_hot_channels=<repo>/config/hot_channels.csv \
+  -Pevio6_file:output_file=out.root \
+  <input>.evio.00000
 ```
 
-Run an interactive shell:
+`-Pjana:nevents=N` counts evio blocks (timeslices), not frames.
 
-```bash
-docker run -it --rm eicdev/jana4ml4fpga:latest bash
-```
+### Parameters
 
-- `-it` — interactive session (needed for a bash shell; without it `ctrl+c` may not work).
-- `--rm` — remove the container's filesystem when it exits. Omit it to keep the
-  container and restart it later with `docker start`.
+| Parameter | Values | Meaning |
+|---|---|---|
+| `evio6_file:parse` | `0`, `1` | `0` reads blocks but skips parsing: a pure I/O measurement, no frames reach the output. |
+| `evio6_file:finder` | `coincidence`, `ecal`, `bypass` | Frame selection. `bypass` writes every frame (diagnostic). |
+| `evio6_file:finder_bin_ticks` | integer | Coincidence finder: time-bin width in ticks. |
+| `evio6_file:finder_min_hits_in_bin` | integer | Coincidence finder: hits per bin required to accept a frame. |
+| `evio6_file:finder_hot_channels` | path | CSV of always-on channels the finder ignores. Without it the finder warns and noisy channels fake coincidences. |
+| `evio6_file:finder_min_ecal_charge` | integer | Threshold used by `finder=ecal`. |
+| `evio6_file:output_file` | path | Output ROOT file. |
+| `evio6_file:writer` | `rntuple`, `null` | `null` discards output; use it to measure the chain without write cost. |
 
-Mount a host directory (e.g. your EVIO data) with `-v`:
+### Output format
 
-```bash
-docker run -it --rm -v /host/data:/mnt/data eicdev/jana4ml4fpga:latest
-```
-
-For C++ debugging (GDB) add:
-
-```bash
---cap-add=SYS_PTRACE --security-opt seccomp=unconfined
-```
-
-Docs: [docker run](https://docs.docker.com/engine/reference/commandline/run/),
-[bind mounts](https://docs.docker.com/storage/bind-mounts/).
-
-## Install from source
-
-`install_software.py` is a one-file installer: it bootstraps a self-contained
-[Miniforge](https://github.com/conda-forge/miniforge) environment (ROOT, a C++20
-toolchain, CMake) and then builds jana4ml4fpga. No pre-installed dependencies are
-needed — JANA2 is fetched and built by the project itself.
-
-```bash
-wget https://raw.githubusercontent.com/JeffersonLab/jana4ml4fpga/main/install_software.py
-python3 install_software.py
-```
-
-Everything is installed under the current directory (set `ML4FPGA_TOP_DIR` to
-install elsewhere). When it finishes, load the environment and run:
-
-```bash
-source setup_env.sh          # bash; use setup_env.csh for (t)csh
-jana4ml4fpga --help
-```
-
-Re-run a single step, or remove everything the installer created:
-
-```bash
-python3 install_software.py -s build_soft   # re-run only the build + install step
-python3 install_software.py --clear         # remove miniforge, build, install, scripts
-```
-
-## Running jana4ml4fpga
-
-Processing is driven by plugins. The active ones are:
-
-| plugin        | role                                                          |
-|---------------|--------------------------------------------------------------|
-| `CDAQfile`    | serial EVIO file source                                      |
-| `CDAQfileMT`  | mmap EVIO source with parallel deserialization (`-Pevio:parallel=1`) |
-| `flat_tree`   | writes the events ROOT tree (per-thread + merged when `nthreads>1`) |
-| `gemrecon2`   | GEM reconstruction (pedestals → clusters)                    |
-| `root_output` | shared ROOT output file service                              |
-| `log`         | logging service (loaded by default)                          |
-
-### ADC readout → flat tree
-
-```bash
-jana4ml4fpga \
-  -Pplugins=CDAQfile,flat_tree,root_output \
-  -Pnthreads=1 \
-  -Phistsfile=output.root \
-  hd_rawdata_002633_000.evio
-```
-
-### SRS / GEM reconstruction
-
-```bash
-jana4ml4fpga \
-  -Pplugins=CDAQfile,flat_tree,root_output,gemrecon2 \
-  -Pdaq:srs_window_raw:ntsamples=3 \
-  -Pgemrecon:mapping=scripts/db/2026_mapping_PS.cfg \
-  -Phistsfile=output.root \
-  hd_rawdata_008169_000.evio
-```
-
-### Parallel (multithreaded) SRS
-
-Use the mmap source and worker threads. `flat_tree` automatically switches to
-multithreaded output (per-thread trees merged via `TBufferMerger`); entries are
-**unordered** — sort by the `event_number` leaf.
-
-```bash
-jana4ml4fpga \
-  -Pplugins=CDAQfileMT,flat_tree,root_output,gemrecon2 \
-  -Pevio:parallel=1 -Pnthreads=8 \
-  -Pdaq:srs_window_raw:ntsamples=3 \
-  -Pgemrecon:mapping=scripts/db/2026_mapping_PS.cfg \
-  -Phistsfile=output.root \
-  hd_rawdata_008169_000.evio
-```
-
-The multithreaded readout needs the allocator tuning
-`GLIBC_TUNABLES=glibc.malloc.tcache_count=4096:glibc.malloc.arena_max=96`
-(`setup_env.sh` sets it for you).
-
-### Farm helper scripts
-
-Under [`scripts/`](scripts): `run_evio.sh <run> <nevents> <mode> <srsbin> [file]`
-runs a single serial job (`mode` = `ADC` / `DUMP` / `SRS`); `run_evio_fast.sh`
-is the parallel (`CDAQfileMT`) SRS variant; `run_list*.sh` dispatch jobs across
-farm nodes.
-
-## Flags
-
-### JANA
-
-```sh
--Pnthreads=8                    # worker threads
--Pjana:nevents=10000            # events to process (0 = all)
--Pjana:nskip=10000              # events to skip
--Pjana:timeout=0                # disable the watchdog (needed when debugging/paused)
--Pjana:debug_plugin_loading=1   # print where plugins are loaded from
-```
-
-### Logging (aspect-based)
-
-Each subsystem logs under an *aspect*: `evio` (readout), `gem` (reconstruction),
-`out` (tree writer), `dqm`. Set the global default and override per aspect:
-
-```sh
--Plog:level=info    # global default level
--Pevio:log=debug    # per-aspect override
--Pgem:log=info
--Pout:log=warn
-```
-
-### SRS / GEM
-
-```sh
--Pdaq:srs_window_raw:ntsamples=3            # number of SRS time bins
--Pgemrecon:mapping=scripts/db/2026_mapping_PS.cfg
--Pgemrecon:plane_name_x=GEMTR1X             # clustering plane names (default URWELLX/Y)
--Pgemrecon:plane_name_y=GEMTR1Y
--Pgemrecon2:freeze_after=500                # freeze calibration after N events (0 = never)
-```
-
-### Parallel source / tree writer
-
-```sh
--Pevio:parallel=1               # CDAQfileMT: parallel EVIO deserialization
--Pevio:prefetch_mb=256          # mmap read-ahead
--Pflat_tree:mt_output=events.root   # MT events file (default <histsfile>_events.root)
--Pflat_tree:flush_events=10000      # per-thread fills between TBufferMerger flushes
-```
-
-## TCP test sender / receiver
-
-Two test executables built with the project:
-
-```bash
-# terminal 1
-tcp_receiver
-
-# terminal 2
-tcp_sender -req=ex -cmd=send -host=localhost:20249
-```
-
-## Data
-
-Raw EVIO data on the gluon farm:
-
-```
-/gluonraid3/data4/rawdata/trd/DATA/hd_rawdata_*.evio
-```
-
-Test setup (as recorded in the run logs):
-
-- `rocFMWPC1` — TI master with a single FA250 board; last 3 channels are calorimeter data.
-- `rocTRD1` — slave with 4 FA125 boards reading GEMTRD (bank 16) and SRS/GEM data (bank 17).
-
-Selected physics runs:
-
-```
-===>  2 crates, 3 detectors: CAL/FA250, GEMTRD/FA125, GEM/SRS
-Run_2531  GEMTRD:ok CAL:ok SRS:del=0x41 3bin 10APV  5.1M ev  *PHYS*
-Run_2543  GEMTRD:ok CAL:ok SRS:del=0x41 3bin 10APV  1.1M ev  *PHYS*
-
-===>  1 crate, 2 detectors: GEMTRD/FA125, GEM/SRS
-Run_2548  GEMTRD:ok CAL:no SRS:del=0x40 9bin 10APV  1.5M ev  *PHYS*
-Run_2567  GEMTRD:ok CAL:no SRS:del=0x40 9bin 10APV  3.2M ev  *PHYS*
-
-===>  Mode8 (RAW) / Mode5 (short)
-Run_2633  GEMTRD:ok CAL:on SRS:del=0x41 3bin 10APV  Mode8  250K ev
-Run_2635  GEMTRD:ok CAL:on SRS:del=0x41 3bin 10APV  Mode5  250K ev
-```
+Three RNTuples keyed on `frame_number`: `frames` (one row per selected frame,
+with `n_fadc_hits` / `n_dcrb_hits` counts), `fadc_hits` and `dcrb_hits` (one
+row per hit, with rocid/slot/channel, charge, time and translated detector
+coordinates).

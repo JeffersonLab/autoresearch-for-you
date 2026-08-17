@@ -42,10 +42,10 @@ CONDA_ENV_NAME = "ml4fpga"
 ENV_NAME_TOP_DIR = "ML4FPGA_TOP_DIR"
 INSTALL_SCRIPTS_DIR_NAME = "install_scripts"
 
-# Conda-forge build dependencies. Deliberately minimal: the active project links
-# only ROOT (fmt/spdlog are otherwise auto-fetched); JANA2 is built by the
-# project. Add analysis packages (uproot, pandas, ...) to your env by hand if you
-# want the python/ notebooks.
+# Conda-forge build dependencies. Deliberately minimal: the project links only
+# ROOT (fmt/spdlog are otherwise auto-fetched) and builds JANA2 itself. Add
+# analysis packages (uproot, pandas, ...) to your env by hand when you need to
+# read the output files.
 CONDA_PACKAGES = "root fmt spdlog cmake make gcc gxx git"
 
 

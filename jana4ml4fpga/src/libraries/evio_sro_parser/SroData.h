@@ -1,8 +1,8 @@
 // Flat data containers filled by the SRO frame-set parser.
 //
 // Design constraint: one parsed evio block produces a handful of std::vector
-// allocations, never per-hit heap objects. (The predecessor HDEVIO chain spent
-// its time deleting thousands of small objects per event; keep it flat.)
+// allocations, never per-hit heap objects. (The predecessor EVIO chain spent its
+// time deleting thousands of small objects per event; keep it flat.)
 
 #pragma once
 

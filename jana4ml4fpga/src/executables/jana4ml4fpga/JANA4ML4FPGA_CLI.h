@@ -8,8 +8,6 @@
 
 #include <JANA/JApplication.h>
 
-#include <rawdataparser/EVIOBlockedEvent.h>
-
 namespace jana {
 
     enum Flag {

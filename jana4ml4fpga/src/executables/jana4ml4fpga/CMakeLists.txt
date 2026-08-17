@@ -25,7 +25,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_link_libraries(${PROJECT_NAME}
         ${JANA_LIB}
         spdlog::spdlog fmt::fmt
-        evio rawdataparser Threads::Threads dl ${ROOT_LIBRARIES}
+        Threads::Threads dl ${ROOT_LIBRARIES}
         )
 
 

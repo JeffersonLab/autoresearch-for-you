@@ -45,8 +45,9 @@ JEventSource::Result EvioSroBlockSource::Emit(JEvent& event) {
 
 template <>
 double JEventSourceGeneratorT<EvioSroBlockSource>::CheckOpenable(std::string resource_name) {
-    // Higher confidence than CDAQfile's 0.5: SRO streaming files carry ".evio."
-    // with a numeric split suffix (sro_000791.evio.00000).
+    // SRO streaming files carry ".evio." with a numeric split suffix
+    // (sro_000791.evio.00000). 0.6 outbids a generic EVIO source's 0.5 when
+    // several sources can open the same file.
     if (resource_name.find(".evio") != std::string::npos) {
         return 0.6;
     }
