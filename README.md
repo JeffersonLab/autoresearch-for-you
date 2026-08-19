@@ -87,21 +87,26 @@ builds and outputs under `<your-data-dir>/autoresearch/`.
 Pull the prebuilt image:
 
 ```bash
+# Option A — Claude Code agent:
 docker pull eicdev/eic-claude:latest
+
+# Option B — Gemini CLI agent:
+docker pull eicdev/eic-gemini:latest
 ```
 
-Or build it from [docker/](docker/):
+Or build from [docker/](docker/):
 
 ```bash
+# Claude Code:
 docker build -t eicdev/eic-claude:latest docker/
+
+# Gemini CLI:
+docker build -t eicdev/eic-gemini:latest -f docker/Dockerfile.gemini docker/
 ```
 
-To run a different agent (Codex CLI, Gemini CLI, ...), replace the Claude Code
-install block in `docker/Dockerfile` with your agent's CLI and keep the rest —
-the base stack (ROOT, JANA2 toolchain, uv) is what the task needs.
-`optimize.md` itself is agent-agnostic.
-
 ### 4. Start the container
+
+**Option A — Claude Code (`eic-claude`):**
 
 ```bash
 docker run --rm -it --init \
@@ -116,18 +121,43 @@ docker run --rm -it --init \
   eicdev/eic-claude:latest bash
 ```
 
+**Option B — Gemini CLI (`eic-gemini`):**
+
+```bash
+docker run --rm -it --init \
+  --user $(id -u):$(id -g) \
+  -e HOME=/myhome \
+  -e GEMINI_CONFIG_DIR=/myhome/.gemini \
+  -e GEMINI_API_KEY=$GEMINI_API_KEY \
+  -e UV_CACHE_DIR=/data/autoresearch/uv-cache \
+  -v ~/.gemini-docker:/myhome/.gemini \
+  -v <your-data-dir>:/data \
+  -v <path-to-this-clone>:/work \
+  -w /work \
+  eicdev/eic-gemini:latest bash
+```
+
 Every flag matters; [docs/running-docker.md](docs/running-docker.md) explains
 each one, the one-time login, and the known gotchas. Create `~/.claude-docker`
-once before the first run (`mkdir -p ~/.claude-docker`) so the login persists
-across containers.
+or `~/.gemini-docker` once before the first run (`mkdir -p ~/.claude-docker` or
+`mkdir -p ~/.gemini-docker`) so credentials persist across containers.
 
 ### 5. Run the loop
 
+**With Claude Code:**
 Inside the container, log in once (`claude`, then `/login`, then `/exit`),
 then start the autonomous run:
 
 ```bash
 claude -p --model claude-fable-5 --dangerously-skip-permissions --verbose < /work/optimize.md
+```
+
+**With Gemini CLI:**
+Inside the container (with `GEMINI_API_KEY` set, or authenticated via `gemini`),
+start the autonomous run:
+
+```bash
+gemini --yolo -p "$(cat /work/optimize.md)"
 ```
 
 Interactive alternative and log-capture variants: see

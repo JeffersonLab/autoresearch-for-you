@@ -1,0 +1,84 @@
+# EIC + Gemini CLI agent layer (adds Node.js + Gemini CLI on top of eic-full)
+#
+# Turns the full EIC software stack into an environment where the Gemini CLI
+# agent can build, run, and debug EIC software either interactively, in a
+# semi-automatic mode (auto-accept edits, prompt for risky commands), or in a
+# fully autonomous / headless mode (--yolo, no prompts).
+#
+# Build:
+#   docker build -t eicdev/eic-gemini:latest -f Dockerfile.gemini .
+#   docker buildx build --tag eicdev/eic-gemini:latest -f Dockerfile.gemini --push .
+
+ARG VERSION_UV=latest
+FROM ghcr.io/astral-sh/uv:${VERSION_UV} AS uv
+
+FROM eicdev/eic-full:latest
+
+WORKDIR ${APP_ROOT}
+
+# ---------------------------------------------------------------------------#
+#  Node.js (Gemini CLI runtime dependency)                                   #
+#                                                                            #
+#  Gemini CLI needs Node.js 20+.  Ubuntu 24.04 ships an older node in its    #
+#  repos, so we install the current LTS (22.x) from NodeSource.              #
+# ---------------------------------------------------------------------------#
+ARG NODE_MAJOR=22
+
+RUN set -ex && \
+    apt-get update && \
+    apt-get install -y ca-certificates gnupg && \
+    mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+        | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
+        > /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
+    apt-get install -y nodejs && \
+    apt-get clean && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------#
+#  Gemini CLI                                                                #
+#                                                                            #
+#  Installed globally via npm.  Pin a specific version with                  #
+#  --build-arg VERSION_GEMINI_CLI=0.56.0 for reproducible builds.            #
+# ---------------------------------------------------------------------------#
+ARG VERSION_GEMINI_CLI=latest
+
+RUN set -ex && \
+    npm install -g "@google/gemini-cli@${VERSION_GEMINI_CLI}" && \
+    npm cache clean --force && \
+    gemini --version
+
+# ---------------------------------------------------------------------------#
+#  uv (Python package/venv manager used by agent workflows)                  #
+#                                                                            #
+#  Copied as static binaries from the `uv` stage defined at the top.         #
+# ---------------------------------------------------------------------------#
+COPY --from=uv /uv /uvx /usr/local/bin/
+
+RUN uv --version
+
+# ---------------------------------------------------------------------------#
+#  Pre-install the project's Python dependencies into the uv cache            #
+# ---------------------------------------------------------------------------#
+COPY pyproject.toml /opt/uv-prime/pyproject.toml
+RUN cd /opt/uv-prime && \
+    uv sync --no-install-project && \
+    rm -rf /opt/uv-prime/.venv
+
+# ---------------------------------------------------------------------------#
+#  Agent configuration                                                        #
+# ---------------------------------------------------------------------------#
+COPY settings.json /root/.gemini/settings.json
+COPY settings.json /etc/gemini-cli/settings.json
+
+ENV IS_SANDBOX=1 \
+    GEMINI_CONFIG_DIR=/root/.gemini
+
+# Non-interactive git identity so autonomous commits do not fail.
+RUN git config --global user.name  "EIC Gemini Agent" && \
+    git config --global user.email "eic-gemini@localhost" && \
+    git config --global init.defaultBranch main && \
+    git config --global --add safe.directory '*'
+
+SHELL ["/bin/bash", "-c"]

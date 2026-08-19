@@ -1,20 +1,26 @@
 # Running the agent container
 
-The image `eicdev/eic-claude` is the EIC software stack (`eicdev/eic-full`:
-ROOT, toolchain, JANA2, spdlog, fmt preinstalled under /app) plus Node.js,
-the Claude Code CLI, and uv. `IS_SANDBOX=1` is baked in, so
-`--dangerously-skip-permissions` (fully autonomous mode) works inside the
+The images `eicdev/eic-claude` and `eicdev/eic-gemini` bundle the full EIC software
+stack (`eicdev/eic-full`: ROOT, toolchain, JANA2, spdlog, fmt preinstalled under
+/app) plus Node.js, the respective agent CLI (Claude Code or Gemini CLI), and uv.
+`IS_SANDBOX=1` is baked in, so autonomous / headless mode works inside the
 container.
 
 ## One-time host preparation
 
 ```bash
+# For Claude Code:
 mkdir -p ~/.claude-docker
+
+# For Gemini CLI:
+mkdir -p ~/.gemini-docker
 ```
 
-This directory persists the Claude Code login across container runs.
+This directory persists agent credentials and settings across container runs.
 
 ## Start the container
+
+### Option A — Claude Code (`eic-claude`)
 
 ```bash
 docker run --rm -it --init \
@@ -27,6 +33,22 @@ docker run --rm -it --init \
   -v <path-to-this-clone>:/work \
   -w /work \
   eicdev/eic-claude:latest bash
+```
+
+### Option B — Gemini CLI (`eic-gemini`)
+
+```bash
+docker run --rm -it --init \
+  --user $(id -u):$(id -g) \
+  -e HOME=/myhome \
+  -e GEMINI_CONFIG_DIR=/myhome/.gemini \
+  -e GEMINI_API_KEY=$GEMINI_API_KEY \
+  -e UV_CACHE_DIR=/data/autoresearch/uv-cache \
+  -v ~/.gemini-docker:/myhome/.gemini \
+  -v <your-data-dir>:/data \
+  -v <path-to-this-clone>:/work \
+  -w /work \
+  eicdev/eic-gemini:latest bash
 ```
 
 Why each flag:
@@ -67,6 +89,7 @@ have an NVIDIA GPU, omit the flag.
 
 ## First run — log in
 
+### Claude Code:
 Inside the container:
 
 ```bash
@@ -80,7 +103,13 @@ Check with `claude auth status`.
 To use an API key instead of a subscription login, skip this and add
 `-e ANTHROPIC_API_KEY=sk-ant-...` to `docker run`.
 
+### Gemini CLI:
+Pass `-e GEMINI_API_KEY=AIzaSy...` into `docker run`, or run `gemini` inside the
+container to authenticate interactively (stored in the mounted `~/.gemini-docker`).
+
 ## Run the optimization loop
+
+### With Claude Code:
 
 Headless, fully autonomous:
 
@@ -88,18 +117,41 @@ Headless, fully autonomous:
 claude -p --model claude-fable-5 --dangerously-skip-permissions --verbose < /work/optimize.md
 ```
 
-Same, with a replayable session log:
+With a replayable session log:
 
 ```bash
 claude -p --model claude-fable-5 --dangerously-skip-permissions \
   --verbose --output-format stream-json < /work/optimize.md \
-  | tee /data/autoresearch/run-$(date +%Y%m%d-%H%M).jsonl
+  | tee /data/autoresearch/run-claude-$(date +%Y%m%d-%H%M).jsonl
 ```
 
 Interactive (watch it work, intervene if needed):
 
 ```bash
 claude --model claude-fable-5 --dangerously-skip-permissions --add-dir /data
+```
+
+then tell it: `Read /work/optimize.md and execute it.`
+
+### With Gemini CLI:
+
+Headless, fully autonomous (YOLO mode):
+
+```bash
+gemini --yolo -p "$(cat /work/optimize.md)"
+```
+
+With session logging:
+
+```bash
+gemini --yolo -p "$(cat /work/optimize.md)" \
+  | tee /data/autoresearch/run-gemini-$(date +%Y%m%d-%H%M).log
+```
+
+Interactive (watch it work, intervene if needed):
+
+```bash
+gemini --yolo
 ```
 
 then tell it: `Read /work/optimize.md and execute it.`
