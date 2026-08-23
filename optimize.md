@@ -74,25 +74,28 @@ directory to LD_LIBRARY_PATH as well.
 
 ## How you work
 
-- On start: if /work/space/notes/STATUS.md exists, read it and resume from
-  where the last run stopped instead of restarting. Keep STATUS.md under ~40
-  lines; it is the single resume entrypoint.
+- On start: read /work/space/notes/STATUS.md if it exists, then process
+  space/QUESTIONS.md as the FIX / PARK / STOP section describes — both before
+  any other action. Then resume from where the last run stopped instead of
+  restarting. Keep STATUS.md under ~40 lines; it is the resume entrypoint.
+  If QUESTIONS.md does not exist yet, there are no questions — continue.
 - When you create code, make it easy for humans to use and maintain; anywhere
   someone starts reading, the context should be quickly clear.
 - When you have enough information to act, act. Do not re-litigate decisions
   already made. If weighing a choice, pick and record a recommendation, not a
-  survey.
+  survey. This never overrides the FIX / PARK / STOP protocol: doubts it
+  routes to a question are not resolved by picking a reading and moving on.
 - Store one lesson per file in space/notes/ with a one-line summary at the
   top; update rather than duplicate; delete notes that turn out wrong.
 - Put plots in space/plots/ and write results up in space/reports/.
   Previous results, plots and knowledge must persist as you progress.
 - Record any new assumption as a config knob in space/notes/DECISIONS.md so it
   is cheap to change later. Tie decisions to evidence and measured numbers.
-- You are operating autonomously; the user cannot answer questions mid-task.
-  For reversible actions that follow from this document, proceed. Stop and ask
-  only if (a) the task is impossible as specified, (b) proceeding would break a
-  permission, (c) an action is irreversible/costly. Write questions to
-  space/QUESTIONS.md, update STATUS.md, then stop.
+- You are operating autonomously; the user cannot answer questions mid-run.
+  For reversible actions that follow from this document, proceed. When
+  anything unexpected happens — or you catch yourself about to assume
+  something the user could have specified — use the FIX / PARK / STOP
+  protocol (next section). Never pursue a doubtful assumption silently.
 - Token thrift: you run on a limited LLM budget, so be economical with your own
   effort — compute is cheap, your tokens are not:
   - Never load raw data into your context. Write scripts that print small
@@ -117,6 +120,103 @@ directory to LD_LIBRARY_PATH as well.
   - Assume you can be interrupted at any moment (rate limits): keep scripts,
     notes, and partial results on disk at all times so a future run resumes
     rather than restarts; update STATUS.md as you go.
+
+## When something unexpected happens — FIX, PARK, or STOP
+
+The user reads space/QUESTIONS.md between runs and answers inline. Questions
+are a deliverable of this job, not an interruption of it: a parked question
+costs a paragraph and you keep working; a stop costs a run; a wrong
+assumption silently pursued can invalidate the whole ledger. A run that ends
+with sharp questions and a clean frozen ledger is a successful run.
+
+Three responses cover everything unexpected:
+
+- **FIX** — resolve it inside this run. FIX applies only when the resolution
+  is verified in this run: the build passes, the gate passes, the counts
+  match. A fix that rests on an unverified interpretation is not a FIX — the
+  interpretation is itself the question: PARK it.
+- **PARK** — write a question, freeze its subject, keep working on something
+  independent.
+- **STOP** — write a question, update STATUS.md, end the run.
+
+**Absolute STOPs, regardless of the table below:** an action would destroy
+something you cannot regenerate (the input file, the reference output, the
+ledger, history.csv — overwriting your own build trees, outputs and caches
+is routine and never triggers this); something would cost real money; the
+task is impossible as specified; or proceeding would require breaking a
+measurement rule of this file (the correctness gate, the locked finder, the
+fixed workload). Proposing a change to a rule is not breaking it — that is a
+PARK (see the table).
+
+### Decision table — check top to bottom, first match wins
+
+| you observe | response |
+|---|---|
+| two defensible readings of the task lead to different experiments or different numbers, and you are about to pick one | **PARK** the choice, with your intended reading as the recommendation. Routine engineering choices (naming, code structure, library picks) are yours — never park those. |
+| the correctness gate fails on an experiment | **FIX**: re-run the gate with your change reverted. Reverted code passes → revert, record REJECTED with the measured delta. Reverted code also fails → the ruler is broken: two rows down. Never adjust the gate, the reference, or the workload to make an experiment pass — wanting to is the next row. |
+| you want to change what the gate accepts, the reference output, the locked finder settings, or the definition of "correct" (the reference from Step 0 exists) | **PARK** the proposal with evidence; do NOT apply it. Continue only work that does not touch the disputed definition; if none exists, **STOP**. Mechanical repairs of verify_output.py that change no verdict (a crash fix) are the build-error row — after fixing, prove verdicts unchanged by verifying the stored reference against itself. Before the Step 0 reference exists, editing verify_output.py is normal Step 0 work. |
+| the Step 0 counts (5500 scanned / 235 selected / 2064003 fadc_hits / 6530147 dcrb_hits) differ, or the stored reference no longer verifies against itself | during Step 0, before the baseline is recorded: **FIX** — debug the setup (build, parameters, input path). After the baseline is recorded: one clean rebuild and rerun with no code changes to rule out a stale environment; if the mismatch persists, **STOP** — the ruler is broken and nothing measured after this is valid. Throughput numbers and run-to-run variance are NOT this row. |
+| a build error, tool error, or crash | **FIX**: debug it. Count attempts per blocked task, not per error message: if the task is still blocked after two distinct fix attempts, revert the working tree to the last state that built, then — evidence points at code you don't own → next row; the error sits in the build/verify/measure path itself → **STOP** (a broken ruler is not parkable); otherwise **PARK** this one experiment (question: drop it, or is there context I'm missing?). |
+| a bug in code you don't own (JANA2, ROOT, the container) | write the question first — it costs a paragraph; a minimal reproducer is good "continuing meanwhile" work (one script, at most; "not my code" is unverified until the reproducer fails with none of your changes in the loop). Chain builds, gate passes, metric unaffected → **PARK** with Frozen: none (question: file upstream? work around?). It blocks — or could skew — the baseline, the gate, or the measured metric → **STOP**. |
+| a discovery that would change the SCOPE — the goal, the fixed workload, the locked finder, or the phase (e.g. "retuning the finder would beat any code change") | **PARK**: write the finding and the proposed re-scope. Do not add it to the backlog or EXPERIMENTS.md, and run no experiment on it. The written plan stays the plan until the user changes it — continue the next planned experiment that passes the freeze check. A new throughput hypothesis inside the current scope is not this row: that is the normal loop, just add it to the backlog. |
+| a subsystem hits the move-on rule (loop step 6) | **FIX**: record the ceiling in the ledger and follow step 6. Normal, not an exit. |
+| the backlog is empty, every subsystem has a recorded ceiling, and the multithread series (loop step 6) is run and recorded | normal completion, not an emergency: write the final report (see Reporting), set the first line of STATUS.md to `DONE — report at space/reports/experiment_report.md`, write NO question, end the run. |
+
+If no row matches: **PARK**. If no row matches and the doubt is about whether
+your measurements are valid — you cannot tell whether the ruler is right —
+**STOP**.
+
+### PARK — the exact protocol
+
+1. Append to space/QUESTIONS.md (N = highest Q number in the file + 1):
+
+   ```markdown
+   ## Q<N> <date> — <one-line question>
+   - Found: <what happened; measured numbers where they exist, otherwise the exact error text verbatim>
+   - Why it matters: <what could change depending on the answer>
+   - Options: A) <...> B) <...>. Recommendation: <letter + one line why>
+   - Frozen until answered: <subsystem names from the fixed list (reader / parser+unfold / writer / topology) and/or file paths — or "none — <why nothing is blocked>">
+   - Continuing meanwhile: <the item you switch to + one line why it touches nothing frozen>
+   - ANSWER:
+   ```
+
+   Options must honestly span the plausible answers: your recommendation AND
+   the strongest alternative.
+2. The freeze is extensional and continuous: for the rest of the run, before
+   starting ANY experiment, check it against the Frozen lists of ALL open
+   questions — allowed if and only if it touches none of the named
+   subsystems or files. Your Recommendation is not an answer: frozen work
+   stays frozen however confident you are about what the user will pick.
+3. Revert the working tree to the last commit before switching (one commit
+   per hypothesis stays clean). If the in-progress diff is evidence for the
+   question, save it under space/notes/ and reference it from the entry.
+4. Switch to the next backlog item that passes the freeze check in step 2.
+   If none exists, STOP.
+5. Add one line to STATUS.md: `Q<N> parked; continuing with <item>`.
+
+### STOP — the exact protocol
+
+For question-driven stops: write the question in the same format (Frozen:
+everything; Continuing: nothing), update STATUS.md so the next run resumes
+from the answer, end the run. Normal completion (table above) writes the
+final report instead of a question. Stopping with a written question is a
+good outcome, not a failure.
+
+### Processing QUESTIONS.md on run start
+
+The set of active freezes is exactly the `Frozen until answered:` lines of
+entries without `[closed]` in their header — nothing else. For each entry:
+
+- ANSWER filled and decisive → apply it, rewrite its Frozen line to
+  `Frozen: none [unfrozen <date>]`, append `[closed <date>]` to the header.
+- ANSWER filled but conditional or unclear → do NOT unfreeze. Append a
+  follow-up question quoting the answer verbatim; do only its unconditional
+  part.
+- ANSWER empty → the freeze stands; do not re-litigate (appending new
+  evidence to the entry is allowed).
+- An entry without `[closed]` says `Frozen: everything` and ANSWER is empty
+  → this run can do nothing: append `still waiting on Q<N>` to STATUS.md and
+  end the run. Do not work around the freeze or reinterpret the question.
 
 ## How you document
 
@@ -189,8 +289,9 @@ produces.
 1. Build the chain and smoke-run 500 blocks single-thread with the locked
    finder settings (see the run recipe above). Expected on this input: 5500
    frames scanned, 235 frames selected, 2064003 fadc_hits and 6530147
-   dcrb_hits written. If you see different counts, stop and debug before
-   anything else.
+   dcrb_hits written. If you see different counts, debug your setup (build,
+   parameters, input path) before anything else; if they still differ with
+   the recipe followed exactly, STOP per the FIX / PARK / STOP table.
 2. Create the measurement harness: `space/scripts/run_perf.sh <label>
    "<notes>" ...` that runs the chain and appends one row to
    `space/perf/history.csv` (date, label, blocks, frames scanned, frames
@@ -232,10 +333,12 @@ regardless of speed — no exceptions, no "close enough".
 
 ## The loop — one hypothesis, one subsystem, one change
 
-Subsystems: reader (file I/O), parser+unfold (incl. finder), RNTuple writer,
+Subsystems only: reader (file I/O), parser+unfold (incl. finder), RNTuple writer,
 JANA topology/threading. For each experiment:
 
-1. **Hypothesize in writing first** (space/notes/EXPERIMENTS.md): subsystem,
+1. **Hypothesize in writing first** in space/notes/EXPERIMENTS.md — the
+   experiment ledger; it also holds the ordered backlog of not-yet-run
+   hypotheses, seeded from Seed hypotheses below. Each entry: subsystem,
    the single change, expected gain with the reasoning from measured numbers.
    If the expected gain cannot be stated, do not run the experiment.
 2. **Change one thing.** No drive-by refactors; unrelated cleanups are separate
@@ -248,8 +351,9 @@ JANA topology/threading. For each experiment:
    why. Accepted => confirm on the full file, update the throughput progression
    plot and STATUS.md; re-run the component isolation runs after each accepted
    parser/writer change.
-6. Work single-thread until single-thread gains dry up (two consecutive
-   experiments on a subsystem < 5% => move on), then open the multithread
+6. Work single-thread until single-thread gains dry up (the move-on rule:
+   two consecutive experiments on a subsystem each ending < 5% or REJECTED
+   => record the ceiling, move on), then open the multithread
    track (nthreads > 1 is a new experiment series; scanned frames/s and MB/s
    are the metrics, thread count always recorded).
 
@@ -258,8 +362,7 @@ JANA topology/threading. For each experiment:
 Priority follows the measured load (parser ~91% in the original profile):
 
 - **Lazy parsing**: the finder needs only clean ECAL hits, but the parser
-  unpacks everything — including DCRB bitmasks (~2.4 G hits/file, ~76% of
-  parse output) for the ~95.7% of frames that get rejected. Parse ECAL first,
+  unpacks everything for the ~95.7% of frames that get rejected. Parse ECAL first,
   run the finder, unpack the rest only for selected frames. Expected:
   several-fold parser gain.
 - Per-hit cost: reserve() hit vectors from payload sizes; flatten translation
