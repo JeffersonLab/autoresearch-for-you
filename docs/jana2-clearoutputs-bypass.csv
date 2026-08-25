@@ -1,0 +1,14 @@
+config,nthreads,run,wall_s,written
+noco,8,1,33.989,wrote_2200_frames
+co,8,1,31.289,wrote_2200_frames
+noco,8,2,29.080,wrote_2200_frames
+co,8,2,27.915,wrote_2200_frames
+noco,8,3,28.188,wrote_2200_frames
+co,8,3,33.421,wrote_2200_frames
+noco,16,1,31.467,wrote_2200_frames
+co,16,1,32.547,wrote_2200_frames
+noco,16,2,32.345,wrote_2200_frames
+co,16,2,32.039,wrote_2200_frames
+noco,16,3,32.753,wrote_2200_frames
+co,16,3,33.778,wrote_2200_frames
+DONE

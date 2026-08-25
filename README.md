@@ -55,7 +55,7 @@ humans, not part of the loop).
 | `jana4ml4fpga/` | The source tree at the pre-optimization state, stripped to the SRO chain: the `evio6_file` plugin, the `evio_sro_parser` library, the log service and the CLI (~46 files). Self-contained: CMake fetches and builds JANA2/spdlog/fmt if not preinstalled; only ROOT is required. See [its README](jana4ml4fpga/README.md) for components and parameters. |
 | `config/hot_channels.csv` | Calibration input of the locked coincidence finder (always-on channels to ignore). Part of the fixed workload — do not regenerate. |
 | `optimize.md` | The task prompt for the agent: working rules + the optimization loop protocol. |
-| `docker/` | Dockerfile for `eicdev/eic-claude` (EIC software stack + Claude Code + uv). |
+| `docker/` | Dockerfiles for the agent images: `Dockerfile` → `eicdev/eic-claude` (EIC software stack + Claude Code + uv), `Dockerfile.opencode` → `eicdev/eic-opencode` (same stack + opencode + uv). |
 | `docs/running-docker.md` | How to run the container: every flag explained, login, headless run, gotchas. |
 | `docs/make_frame_display.py` | Renders the frame picture above from a chain output file. Optional reading aid. |
 | `RESULTS.md` | Reference results from the original run. Read after your own run. |
@@ -90,8 +90,8 @@ Pull the prebuilt image:
 # Option A — Claude Code agent:
 docker pull eicdev/eic-claude:latest
 
-# Option B — Gemini CLI agent:
-docker pull eicdev/eic-gemini:latest
+# Option B — opencode agent (any LLM provider):
+docker pull eicdev/eic-opencode:latest
 ```
 
 Or build from [docker/](docker/):
@@ -100,8 +100,8 @@ Or build from [docker/](docker/):
 # Claude Code:
 docker build -t eicdev/eic-claude:latest docker/
 
-# Gemini CLI:
-docker build -t eicdev/eic-gemini:latest -f docker/Dockerfile.gemini docker/
+# opencode:
+docker build -t eicdev/eic-opencode:latest -f docker/Dockerfile.opencode docker/
 ```
 
 ### 4. Start the container
@@ -121,26 +121,34 @@ docker run --rm -it --init \
   eicdev/eic-claude:latest bash
 ```
 
-**Option B — Gemini CLI (`eic-gemini`):**
+**Option B — opencode (`eic-opencode`):**
 
 ```bash
 docker run --rm -it --init \
   --user $(id -u):$(id -g) \
   -e HOME=/myhome \
-  -e GEMINI_CONFIG_DIR=/myhome/.gemini \
-  -e GEMINI_API_KEY=$GEMINI_API_KEY \
+  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
   -e UV_CACHE_DIR=/data/autoresearch/uv-cache \
-  -v ~/.gemini-docker:/myhome/.gemini \
+  -v ~/.opencode-docker:/myhome \
   -v <your-data-dir>:/data \
   -v <path-to-this-clone>:/work \
   -w /work \
-  eicdev/eic-gemini:latest bash
+  eicdev/eic-opencode:latest bash
 ```
+
+opencode picks its provider from whichever API key is in the environment
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`,
+…); swap the key above for the provider you want, or pin a model explicitly
+with `-m provider/model`.
+
+Note the mount shape differs between the two: Claude Code needs only its config
+subdirectory mounted, while opencode creates several XDG directories under
+`$HOME` at startup, so the **whole** home is mounted.
 
 Every flag matters; [docs/running-docker.md](docs/running-docker.md) explains
 each one, the one-time login, and the known gotchas. Create `~/.claude-docker`
-or `~/.gemini-docker` once before the first run (`mkdir -p ~/.claude-docker` or
-`mkdir -p ~/.gemini-docker`) so credentials persist across containers.
+or `~/.opencode-docker` once before the first run (`mkdir -p ~/.claude-docker`
+or `mkdir -p ~/.opencode-docker`) so credentials persist across containers.
 
 ### 5. Run the loop
 
@@ -152,12 +160,12 @@ then start the autonomous run:
 claude -p --model claude-fable-5 --dangerously-skip-permissions --verbose < /work/optimize.md
 ```
 
-**With Gemini CLI:**
-Inside the container (with `GEMINI_API_KEY` set, or authenticated via `gemini`),
-start the autonomous run:
+**With opencode:**
+Inside the container (with a provider API key set, or authenticated via
+`opencode providers login`), start the autonomous run:
 
 ```bash
-gemini --yolo -p "$(cat /work/optimize.md)"
+opencode run --auto "$(cat /work/optimize.md)"
 ```
 
 Interactive alternative and log-capture variants: see

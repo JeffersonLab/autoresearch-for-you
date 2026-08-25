@@ -25,6 +25,8 @@ find_package(ROOT REQUIRED)
 option(FETCH_DEPENDENCIES "Download and build missing dependencies (JANA2, spdlog, fmt) with FetchContent" ON)
 if(FETCH_DEPENDENCIES)
     include(cmake/fetch_dependencies.cmake)
+else()
+    message(WARNING "${CMAKE_PROJECT_NAME}: FETCH_DEPENDENCIES=OFF - JANA2 comes from the environment and does NOT carry this project's patches. The chain needs the unfolder fixes released in JANA2 v2026.03.01, and older builds segfault on the first block (see docs/jana2-unfolder-bug.md).")
 endif()
 
 find_package(JANA REQUIRED)
@@ -46,6 +48,23 @@ message(STATUS "${CMAKE_PROJECT_NAME}: PLUGIN_OUTPUT_DIRECTORY : ${PLUGIN_OUTPUT
 message(STATUS "${CMAKE_PROJECT_NAME}: INCLUDE_OUTPUT_DIRECTORY: ${INCLUDE_OUTPUT_DIRECTORY}")
 message(STATUS "${CMAKE_PROJECT_NAME}: LIBRARY_OUTPUT_DIRECTORY: ${LIBRARY_OUTPUT_DIRECTORY}")
 message(STATUS "${CMAKE_PROJECT_NAME}: PROGRAM_OUTPUT_DIRECTORY: ${PROGRAM_OUTPUT_DIRECTORY}")
+
+# Installed binaries and plugins must load the JANA2 that was built with this
+# project's patches (cmake/patches/, see docs/jana2-unfolder-bug.md), not one that
+# happens to sit earlier on LD_LIBRARY_PATH - the EIC docker images ship their own
+# libJANA.so, and loading it reintroduces the segfault the patches remove.
+# $ORIGIN/../lib resolves to <prefix>/lib for both <prefix>/bin and <prefix>/plugins,
+# which is where fetch_dependencies.cmake installs libJANA.so.
+# Set before any target is created: targets capture this value when they are defined.
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+
+# Emit DT_RPATH instead of the modern default DT_RUNPATH. The dynamic linker searches
+# DT_RPATH *before* LD_LIBRARY_PATH but DT_RUNPATH *after* it, so with the default an
+# environment that puts another JANA2 on LD_LIBRARY_PATH still wins - which is exactly
+# the docker-image case this guards against.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_link_options("LINKER:--disable-new-dtags")
+endif()
 
 # JANA2
 message(STATUS "${CMAKE_PROJECT_NAME}: JANA2 cmake   : ${JANA_DIR}")

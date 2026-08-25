@@ -1,0 +1,77 @@
+--- a/src/libraries/JANA/Topology/JArrow.h
++++ b/src/libraries/JANA/Topology/JArrow.h
+@@ -106,6 +106,12 @@
+ 
+     void Push(OutputData& outputs, size_t output_count, size_t location_id);
+ 
++    /// Clears every output event that is bound for an event pool and has no children
++    /// left. This is the expensive part of recycling an event, so it is kept separate
++    /// from Push(): callers run it *outside* the JExecutionEngine mutex, after Fire()
++    /// and before Push(), while they still own the outputs exclusively.
++    void ClearOutputs(OutputData& outputs, size_t output_count);
++
+ 
+     const std::string& GetName() { return m_name; }
+     int GetId() { return m_id; }
+--- a/src/libraries/JANA/Topology/JArrow.cc
++++ b/src/libraries/JANA/Topology/JArrow.cc
+@@ -1,5 +1,6 @@
+ 
+ #include <JANA/Topology/JArrow.h>
++#include <JANA/JEvent.h>
+ 
+ 
+ JArrow::Port& JArrow::AddPort(std::string name, JEventLevel level, PortDirection direction) {
+@@ -56,6 +57,29 @@
+         }
+     }
+ }
++
++void JArrow::ClearOutputs(OutputData& outputs, size_t output_count) {
++    // Recycling an event runs JEvent::Clear(), whose JFactorySet::Clear() deletes every
++    // object inserted into it - thousands of deallocations for a parsed EVIO block.
++    // JEventPool does that from inside Push(), which the engine calls with its mutex
++    // held, so every worker serializes through one lock. Doing it here instead, after
++    // Fire() and before Push(), keeps it off the mutex while the outputs are still owned
++    // by this worker alone.
++    //
++    // Events that still have children are deliberately skipped: a child may hold a
++    // pointer into data its parent inserted, so only the pool may clear a parent, once
++    // the last child has finished. Skipping is always safe because the pool clears
++    // whatever reaches it uncleared; the second Clear() there is then a cheap no-op,
++    // since Clear() nulls mEventSource (FinishEvent cannot fire twice) and an emptied
++    // JFactorySet has nothing left to delete.
++    for (size_t output = 0; output < output_count; ++output) {
++        JEvent* event = outputs[output].first;
++        Port& port = GetPort(outputs[output].second);
++        if (port.GetQueue() == nullptr && port.GetPool() != nullptr && event->GetChildCount() == 0) {
++            event->Clear();
++        }
++    }
++}
+ 
+ JArrow::FireResult JArrow::Execute(size_t location_id) {
+ 
+--- a/src/libraries/JANA/Engine/JExecutionEngine.cc
++++ b/src/libraries/JANA/Engine/JExecutionEngine.cc
+@@ -456,6 +456,11 @@
+ 
+ void JExecutionEngine::ExchangeTask(Task& task, size_t worker_id, bool nonblocking) {
+ 
++    if (task.arrow != nullptr) {
++        // Recycle the finished task's pool-bound outputs before acquiring the mutex.
++        task.arrow->ClearOutputs(task.outputs, task.output_count);
++    }
++
+     auto checkin_time = std::chrono::steady_clock::now();
+     // It's important to start measuring this _before_ acquiring the lock because acquiring the lock
+     // may be a big part of the scheduler overhead
+@@ -779,6 +784,8 @@
+         }
+     }
+ 
++    arrow->ClearOutputs(outputs, output_count);  // expensive event recycling: outside the lock
++
+     lock.lock();
+     arrow->Push(outputs, output_count, location_id);
+     arrow_state.active_tasks -= 1;

@@ -1,13 +1,19 @@
-# EIC + Gemini CLI agent layer (adds Node.js + Gemini CLI on top of eic-full)
+# EIC + opencode agent layer (adds Node.js + opencode on top of eic-full)
 #
-# Turns the full EIC software stack into an environment where the Gemini CLI
+# Turns the full EIC software stack into an environment where the opencode
 # agent can build, run, and debug EIC software either interactively, in a
-# semi-automatic mode (auto-accept edits, prompt for risky commands), or in a
-# fully autonomous / headless mode (--yolo, no prompts).
+# semi-automatic mode (auto-accept edits, prompt for shell commands), or in a
+# fully autonomous / headless mode (--auto, no prompts).
+#
+# opencode is provider-agnostic: it picks a provider from whichever API key is
+# present in the environment (ANTHROPIC_API_KEY, OPENAI_API_KEY,
+# GEMINI_API_KEY, OPENROUTER_API_KEY, ...), or from an auth.json written by
+# `opencode providers login`.  No default model is baked in; pass
+# `-m provider/model` to pin one.
 #
 # Build:
-#   docker build -t eicdev/eic-gemini:latest -f Dockerfile.gemini .
-#   docker buildx build --tag eicdev/eic-gemini:latest -f Dockerfile.gemini --push .
+#   docker build -t eicdev/eic-opencode:latest -f Dockerfile.opencode .
+#   docker buildx build --tag eicdev/eic-opencode:latest -f Dockerfile.opencode --push .
 
 ARG VERSION_UV=latest
 FROM ghcr.io/astral-sh/uv:${VERSION_UV} AS uv
@@ -17,10 +23,10 @@ FROM eicdev/eic-full:latest
 WORKDIR ${APP_ROOT}
 
 # ---------------------------------------------------------------------------#
-#  Node.js (Gemini CLI runtime dependency)                                   #
+#  Node.js (opencode runtime dependency)                                     #
 #                                                                            #
-#  Gemini CLI needs Node.js 20+.  Ubuntu 24.04 ships an older node in its    #
-#  repos, so we install the current LTS (22.x) from NodeSource.              #
+#  The opencode npm package needs Node.js 20+.  Ubuntu 24.04 ships an older  #
+#  node in its repos, so we install the current LTS (22.x) from NodeSource.  #
 # ---------------------------------------------------------------------------#
 ARG NODE_MAJOR=22
 
@@ -37,17 +43,17 @@ RUN set -ex && \
     apt-get clean && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------#
-#  Gemini CLI                                                                #
+#  opencode                                                                   #
 #                                                                            #
 #  Installed globally via npm.  Pin a specific version with                  #
-#  --build-arg VERSION_GEMINI_CLI=0.56.0 for reproducible builds.            #
+#  --build-arg VERSION_OPENCODE=1.18.21 for reproducible builds.             #
 # ---------------------------------------------------------------------------#
-ARG VERSION_GEMINI_CLI=latest
+ARG VERSION_OPENCODE=latest
 
 RUN set -ex && \
-    npm install -g "@google/gemini-cli@${VERSION_GEMINI_CLI}" && \
+    npm install -g "opencode-ai@${VERSION_OPENCODE}" && \
     npm cache clean --force && \
-    gemini --version
+    opencode --version
 
 # ---------------------------------------------------------------------------#
 #  uv (Python package/venv manager used by agent workflows)                  #
@@ -68,16 +74,22 @@ RUN cd /opt/uv-prime && \
 
 # ---------------------------------------------------------------------------#
 #  Agent configuration                                                        #
+#                                                                            #
+#  Two copies are baked.  /root/.config/opencode/opencode.json is the XDG     #
+#  default picked up by root runs.  /etc/opencode/opencode.json is the one    #
+#  OPENCODE_CONFIG points at: /root is mode 700, so a `--user $(id -u)` run   #
+#  cannot read the copy under /root, and would otherwise silently lose the    #
+#  baked defaults.                                                            #
 # ---------------------------------------------------------------------------#
-COPY settings.json /root/.gemini/settings.json
-COPY settings.json /etc/gemini-cli/settings.json
+COPY opencode.json /root/.config/opencode/opencode.json
+COPY opencode.json /etc/opencode/opencode.json
 
-ENV IS_SANDBOX=1 \
-    GEMINI_CONFIG_DIR=/root/.gemini
+ENV OPENCODE_CONFIG=/etc/opencode/opencode.json \
+    OPENCODE_DISABLE_AUTOUPDATE=1
 
 # Non-interactive git identity so autonomous commits do not fail.
-RUN git config --global user.name  "EIC Gemini Agent" && \
-    git config --global user.email "eic-gemini@localhost" && \
+RUN git config --global user.name  "EIC OpenCode Agent" && \
+    git config --global user.email "eic-opencode@localhost" && \
     git config --global init.defaultBranch main && \
     git config --global --add safe.directory '*'
 
