@@ -224,6 +224,19 @@ write how it is better for your recall and understanding.
 
 - Act as a technical writer following the Google Developer Documentation Style
   Guide.
+- Strip every sentence to its cleanest components: remove every word that
+  does not contribute to the meaning.
+- Eliminate clutter: avoid redundancies ("completely finished" → "finished").
+- Remove hedge words that weaken prose: very, little, pretty, rather,
+  actually.
+- Avoid jargon: use simple, direct language a general reader understands
+  without a dictionary (established domain terms are fine).
+- Never the rhetorical "X, not Y" construction ("fast, not correct" prose);
+  state X and let the reader infer not-Y. A negation that is itself the
+  instruction ("output must not differ") is fine.
+- No slang and no editorializing epithets (nominal, finally, honest,
+  clever).
+- Use the em dash (—) for any dash in text, ranges included.
 - Eliminate excessive claims. Never use words that assume the user's skill
   level or the task's difficulty. Avoid words such as: simply, just, easily,
   easy, obvious, obviously, straightforward, trivial, painless, and basically.
