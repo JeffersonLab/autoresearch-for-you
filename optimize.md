@@ -18,9 +18,11 @@ existing filtered chain.
     chain: the plugin `evio6_file` (src/plugins/evio6_file), the decode library
     `evio_sro_parser` (src/libraries/evio_sro_parser), a log service and the
     CLI. Component and parameter reference: /work/jana4ml4fpga/README.md.
-  - /work/space/ is your workspace: notes, scripts, plots, analyses and
-    anything else that does not belong in the source tree. Create it on
-    first run.
+  - `{space}` = **/work/space** — your workspace: QUESTIONS.md,
+    notes/STATUS.md, and the notes, scripts, plots, analyses and anything
+    else that does not belong in the source tree. Create it on first run. Every
+    `{space}/...` path in this file means that directory; renaming the
+    workspace changes this line and nothing else.
   - Bulky outputs and the writable data store go to /data/autoresearch/
     (build trees, .root outputs, caches).
   - Input data: /data/sro_boyarinov_data_2026/sro_000791.evio.00000
@@ -73,28 +75,33 @@ directory to LD_LIBRARY_PATH as well.
 
 ## How you work
 
-- On start: read /work/space/notes/STATUS.md if it exists, then process
-  space/QUESTIONS.md as the FIX / PARK / STOP section describes — both before
-  any other action. Then resume from where the last run stopped instead of
-  restarting. Keep STATUS.md under ~40 lines; it is the resume entrypoint.
-  If QUESTIONS.md does not exist yet, there are no questions — continue.
+- On start: read {space}/notes/STATUS.md if it exists, then process
+  {space}/QUESTIONS.md as the FIX / ASK / PARK / STOP section describes —
+  both before any other action. Then resume from where the last run stopped
+  instead of restarting. Keep STATUS.md under ~40 lines; it is the resume
+  entrypoint. If QUESTIONS.md does not exist yet, there are no questions —
+  continue.
 - When you create code, make it easy for humans to use and maintain:
   anywhere someone starts reading, the context is quickly clear.
 - When you have enough information to act, act. Do not re-litigate decisions
   already made. If weighing a choice, pick one and record the recommendation.
-  This never overrides FIX / PARK / STOP: a doubt it routes to a question
-  stays a question.
-- Store one lesson per file in space/notes/ with a one-line summary at the
+  This never overrides FIX / ASK / PARK / STOP: a doubt it routes to a
+  question stays a question.
+- Store one lesson per file in {space}/notes/ with a one-line summary at the
   top; update rather than duplicate; delete notes that turn out wrong.
-- Put plots in space/plots/ and write results up in space/reports/.
+- Put plots in {space}/plots/ and write results up in {space}/reports/.
   Previous results, plots and knowledge must persist as you progress.
-- Record any new assumption as a config knob in space/notes/DECISIONS.md so it
+- Record any new assumption as a config knob in {space}/notes/DECISIONS.md so it
   is cheap to change later. Tie decisions to evidence and measured numbers.
 - You are operating autonomously; the user cannot answer questions mid-run.
   For reversible actions that follow from this document, proceed. When
   anything unexpected happens — or you catch yourself about to assume
-  something the user could have specified — use the FIX / PARK / STOP
-  protocol (next section). Never pursue a doubtful assumption silently.
+  something the user could have specified — use the FIX / ASK / PARK /
+  STOP protocol (next section). Never pursue a doubtful assumption
+  silently.
+- Write every question into {space}/QUESTIONS.md the moment it occurs to
+  you. That file is your only channel to the user, and it carries every
+  kind of question — the ones that block you and the ones that do not.
 - Token thrift: you run on a limited LLM budget, so be economical with your
   own effort — compute is cheap, tokens are expensive:
   - Never load raw data into your context. Write scripts that print small
@@ -120,23 +127,44 @@ directory to LD_LIBRARY_PATH as well.
     notes, and partial results on disk at all times so a future run resumes
     rather than restarts; update STATUS.md as you go.
 
-## When something unexpected happens — FIX, PARK, or STOP
+## When something unexpected happens — FIX, ASK, PARK, or STOP
 
-The user reads space/QUESTIONS.md between runs and answers inline. Questions
-are a deliverable of this job: a parked question costs a paragraph and you
-keep working; a stop costs a run; a wrong assumption silently pursued can
-invalidate the whole ledger. A run that ends with clear questions and a
-clean frozen ledger is a successful run.
+- The user reads {space}/QUESTIONS.md between runs and answers inline. 
+- User might explicitly say they are online and can answer interactrively
+- If no explicit command from user is given, that file is your only channel 
+to the user, so it carries every question you
+have: what blocks you, what you would ask if the user sat beside you, and
+what they should decide before the next phase. 
+- Questions are a deliverable of this job! 
+- A parked question costs a paragraph and you keep working; a
+stop costs a run; a wrong assumption silently pursued can invalidate a
+whole phase. A run that ends with clear questions and a clean frozen
+ledger is a successful run.
 
-Three responses cover everything unexpected:
+Four responses cover everything:
 
-- **FIX** — resolve it inside this run. FIX applies only when the resolution
-  is verified in this run: the build passes, the gate passes, the counts
-  match. A fix that rests on an unverified interpretation is not a FIX — the
-  interpretation is itself the question: PARK it.
-- **PARK** — write a question, freeze its subject, keep working on something
-  independent.
-- **STOP** — write a question, update STATUS.md, end the run.
+- **FIX** — resolve it inside this run, no question. FIX applies only when
+  the resolution is verified in this run: the build passes, the gate
+  passes, the counts match. A fix that rests on an unverified
+  interpretation is not a FIX — the interpretation is itself the question:
+  PARK it.
+- **ASK** — write a plain question, freeze nothing, keep working.
+- **PARK** — write a `BLOCKING(!)` question, freeze its subject, keep
+  working on something independent.
+- **STOP** — write a `BLOCKING(!)` question, freeze everything, update
+  STATUS.md, end the run.
+
+A question is **BLOCKING(!)** when its answer could invalidate or redirect
+work this run would otherwise do. When the answer affects only future runs
+or the user's own decisions, it is a plain ASK: write it and keep working.
+Between ASK and PARK, weigh what a wrong guess costs — if it costs work
+already done, PARK.
+
+The decision table routes what goes wrong. ASK also covers what the table
+never sees: a preference the user could have stated, a question for an
+upstream maintainer, a scope doubt about work you are not doing, a finding
+that deserves a verdict. Routine engineering choices (naming, code
+structure, library picks) are yours — never ask those.
 
 **Absolute STOPs, regardless of the table below:** an action would destroy
 something you cannot regenerate (the input file, the reference output, the
@@ -156,66 +184,91 @@ PARK (see the table).
 | you want to change what the gate accepts, the reference output, the locked finder settings, or the definition of "correct" (the reference from Step 0 exists) | **PARK** the proposal with evidence; do NOT apply it. Continue only work that does not touch the disputed definition; if none exists, **STOP**. Mechanical repairs of verify_output.py that change no verdict (a crash fix) are the build-error row — after fixing, prove verdicts unchanged by verifying the stored reference against itself. Before the Step 0 reference exists, editing verify_output.py is normal Step 0 work. |
 | the Step 0 counts (5500 scanned / 235 selected / 2064003 fadc_hits / 6530147 dcrb_hits) differ, or the stored reference no longer verifies against itself | during Step 0, before the baseline is recorded: **FIX** — debug the setup (build, parameters, input path). After the baseline is recorded: one clean rebuild and rerun with no code changes to rule out a stale environment; if the mismatch persists, **STOP** — the ruler is broken and nothing measured after this is valid. Throughput numbers and run-to-run variance are NOT this row. |
 | a build error, tool error, or crash | **FIX**: debug it. Count attempts per blocked task, not per error message: if the task is still blocked after two distinct fix attempts, revert the working tree to the last state that built, then — evidence points at code you don't own → next row; the error sits in the build/verify/measure path itself → **STOP** (a broken ruler is not parkable); otherwise **PARK** this one experiment (question: drop it, or is there context I'm missing?). |
-| a bug in code you don't own (JANA2, ROOT, the container) | write the question first; a minimal reproducer is good "continuing meanwhile" work (one script, at most; "not my code" is unverified until the reproducer fails with none of your changes in the loop). Chain builds, gate passes, metric unaffected → **PARK** with Frozen: none (question: file upstream? work around?). It blocks — or could skew — the baseline, the gate, or the measured metric → **STOP**. |
+| a bug in code you don't own (JANA2, ROOT, the container) | write the question first; a minimal reproducer is good "continuing meanwhile" work (one script, at most; "not my code" is unverified until the reproducer fails with none of your changes in the loop). Chain builds, gate passes, metric unaffected → **ASK** and continue (question: file upstream? work around?). It blocks — or could skew — the baseline, the gate, or the measured metric → **STOP**. |
 | a discovery that would change the SCOPE — the goal, the fixed workload, the locked finder, or the phase (e.g. "retuning the finder would beat any code change") | **PARK**: write the finding and the proposed re-scope. Do not add it to the backlog or EXPERIMENTS.md, and run no experiment on it. The written plan stays the plan until the user changes it — continue the next planned experiment that passes the freeze check. A new throughput hypothesis inside the current scope is not this row: that is the normal loop, just add it to the backlog. |
 | a subsystem hits the move-on rule (loop step 6) | **FIX**: record the ceiling in the ledger and follow step 6. |
-| the backlog is empty, every subsystem has a recorded ceiling, and the multithread series (loop step 6) is run and recorded | normal completion: write the final report (see Reporting), set the first line of STATUS.md to `DONE — report at space/reports/experiment_report.md`, write NO question, end the run. |
+| the backlog is empty, every subsystem has a recorded ceiling, and the multithread series (loop step 6) is run and recorded | normal completion: write the final report (see Reporting), then sweep for questions — reread the ledger, notes and DECISIONS.md and **ASK** everything the user should decide or know before the next run. Set the first line of STATUS.md to `DONE — report at {space}/reports/experiment_report.md` and end the run. The end of a run is when questions matter most: the report says what happened, the questions say what the user must answer next. Finishing with an empty QUESTIONS.md is a defect, not a clean run. |
 
 If no row matches: **PARK**. If no row matches and the doubt is about whether
 your measurements are valid — you cannot tell whether the ruler is right —
 **STOP**.
 
+### ASK — the exact protocol
+
+Append to {space}/QUESTIONS.md (N = highest Q number in the file + 1):
+
+```markdown
+## Q<N> <date> — <one-line question>
+- Found: <what prompted it; measured numbers where they exist, otherwise the exact error text verbatim>
+- Why it matters: <what could change depending on the answer>
+- Options: A) <...> B) <...>. Recommendation: <letter + one line why>
+- ANSWER:
+```
+
+A plain entry freezes nothing. Keep working — including on its subject,
+following your recommendation. It needs no STATUS.md line; the entry is the
+record. Options must span the plausible answers: your recommendation AND
+the strongest alternative.
+
 ### PARK — the exact protocol
 
-1. Append to space/QUESTIONS.md (N = highest Q number in the file + 1):
+1. Append to {space}/QUESTIONS.md, `BLOCKING(!)` opening the question line
+   (N = highest Q number in the file + 1):
 
    ```markdown
-   ## Q<N> <date> — <one-line question>
+   ## Q<N> <date> — BLOCKING(!) <one-line question>
    - Found: <what happened; measured numbers where they exist, otherwise the exact error text verbatim>
    - Why it matters: <what could change depending on the answer>
    - Options: A) <...> B) <...>. Recommendation: <letter + one line why>
-   - Frozen until answered: <subsystem names from the fixed list (reader / parser+unfold / writer / topology) and/or file paths — or "none — <why nothing is blocked>">
+   - Frozen until answered: <subsystem names from the fixed list (reader / parser+unfold / writer / topology) and/or file paths>
    - Continuing meanwhile: <the item you switch to + one line why it touches nothing frozen>
    - ANSWER:
    ```
 
    Options must span the plausible answers: your recommendation AND the
-   strongest alternative.
+   strongest alternative. A question that freezes nothing is an ASK, not a
+   PARK — write it in the plain format.
 2. The freeze names concrete items and lasts the whole run: before starting
-   ANY experiment, check it against the Frozen lists of ALL open questions —
-   allowed only if it touches none of the named subsystems or files. Your
-   Recommendation is not an answer: frozen work stays frozen regardless of
-   your confidence.
+   ANY experiment, check it against the Frozen lists of ALL open BLOCKING(!)
+   questions — allowed only if it touches none of the named subsystems or
+   files. Your Recommendation is not an answer: frozen work stays frozen
+   regardless of your confidence.
 3. Revert the working tree to the last commit before switching (one commit
    per hypothesis stays clean). If the in-progress diff is evidence for the
-   question, save it under space/notes/ and reference it from the entry.
+   question, save it under {space}/notes/ and reference it from the entry.
 4. Switch to the next backlog item that passes the freeze check in step 2.
    If none exists, STOP.
 5. Add one line to STATUS.md: `Q<N> parked; continuing with <item>`.
 
 ### STOP — the exact protocol
 
-For question-driven stops: write the question in the same format (Frozen:
-everything; Continuing: nothing), update STATUS.md so the next run resumes
-from the answer, end the run. Normal completion (table above) writes the
-final report instead of a question. Stopping with a written question is a
-good outcome.
+For question-driven stops: write the BLOCKING(!) question in the PARK
+format (Frozen: everything; Continuing: nothing), update STATUS.md so the
+next run resumes from the answer, end the run. Normal completion (table
+above) writes the final report and its ASK sweep instead. Stopping with a
+written question is a good outcome.
 
 ### Processing QUESTIONS.md on run start
 
 The set of active freezes is exactly the `Frozen until answered:` lines of
-entries without `[closed]` in their header — nothing else. For each entry:
+`BLOCKING(!)` entries without `[closed]` in their header — nothing else.
+Plain entries never freeze anything. For each entry:
 
-- ANSWER filled and decisive → apply it, rewrite its Frozen line to
-  `Frozen: none [unfrozen <date>]`, append `[closed <date>]` to the header.
+- ANSWER filled and decisive → apply it, append `[closed <date>]` to the
+  header; for a BLOCKING(!) entry also rewrite its Frozen line to
+  `Frozen: none [unfrozen <date>]`.
 - ANSWER filled but conditional or unclear → do NOT unfreeze. Append a
   follow-up question quoting the answer verbatim; do only its unconditional
   part.
-- ANSWER empty → the freeze stands; do not re-litigate (appending new
-  evidence to the entry is allowed).
-- An entry without `[closed]` says `Frozen: everything` and ANSWER is empty
-  → this run can do nothing: append `still waiting on Q<N>` to STATUS.md and
-  end the run. Do not work around the freeze or reinterpret the question.
+- ANSWER empty on a plain entry → it stays open and blocks nothing. Do not
+  re-litigate it and do not ask it again; append new evidence to the entry
+  if you find any.
+- ANSWER empty on a BLOCKING(!) entry → the freeze stands; do not
+  re-litigate (appending new evidence to the entry is allowed).
+- A BLOCKING(!) entry without `[closed]` says `Frozen: everything` and
+  ANSWER is empty → this run can do nothing: append `still waiting on
+  Q<N>` to STATUS.md and end the run. Do not work around the freeze or
+  reinterpret the question.
 
 ## How you document
 
@@ -302,13 +355,13 @@ produces.
    frames scanned, 235 frames selected, 2064003 fadc_hits and 6530147
    dcrb_hits written. If you see different counts, debug your setup (build,
    parameters, input path) before anything else; if they still differ with
-   the recipe followed exactly, STOP per the FIX / PARK / STOP table.
-2. Create the measurement harness: `space/scripts/run_perf.sh <label>
+   the recipe followed exactly, STOP per the FIX / ASK / PARK / STOP table.
+2. Create the measurement harness: `{space}/scripts/run_perf.sh <label>
    "<notes>" ...` that runs the chain and appends one row to
-   `space/perf/history.csv` (date, label, blocks, frames scanned, frames
+   `{space}/perf/history.csv` (date, label, blocks, frames scanned, frames
    selected, wall seconds, scanned frames/s, input MB/s, threads, notes).
    Measure hot-cache: do one warmup read after touching large files.
-3. Create the correctness gate: `space/scripts/verify_output.py` — given two
+3. Create the correctness gate: `{space}/scripts/verify_output.py` — given two
    chain output files, compare (a) the set of selected frame_numbers, (b)
    per-frame n_fadc/n_dcrb counts, (c) an order-insensitive hash over all hit
    rows. Generate the reference once from the unmodified code (500 blocks,
@@ -347,13 +400,13 @@ regardless of speed — no exceptions.
 Subsystems only: reader (file I/O), parser+unfold (incl. finder), RNTuple writer,
 JANA topology/threading. For each experiment:
 
-1. **Hypothesize in writing first** in space/notes/EXPERIMENTS.md — the
+1. **Hypothesize in writing first** in {space}/notes/EXPERIMENTS.md — the
    experiment ledger; it also holds the ordered backlog of not-yet-run
    hypotheses, seeded from Seed hypotheses below. Each entry: subsystem,
    the single change, expected gain with the reasoning from measured numbers.
    If the expected gain cannot be stated, do not run the experiment.
 2. **Change one thing.** Unrelated cleanups are separate ledger entries.
-3. **Measure** via `bash space/scripts/run_perf.sh <label> "<hypothesis ref>"
+3. **Measure** via `bash {space}/scripts/run_perf.sh <label> "<hypothesis ref>"
    ...` — 500 blocks, hot cache. Repeat once if the delta is under ~5%; note
    run-to-run variance.
 4. **Gate**: verify_output.py against the reference. Fail => revert, record.
@@ -397,6 +450,6 @@ Priority follows the measured load (parser ~91% in the original profile):
 ## Reporting
 
 Keep the experiment ledger append-only and one entry per hypothesis. End of
-run: space/reports/experiment_report.md with the waterfall of accepted gains
+run: {space}/reports/experiment_report.md with the waterfall of accepted gains
 (baseline -> final MB/s), the final component profile, and the throughput
 progression plot. Include a rejected-hypotheses section: record why each idea failed.
